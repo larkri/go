@@ -34,7 +34,7 @@
     const offset = cellSize;
 
     const gameState = Array.from({ length: boardSize }, () => Array(boardSize).fill(null));
-    let currentPlayer = "black";
+    let currentPlayer = "black"; // Spelare som börjar är svart
 
     const hoshiCoords = [3, 9, 15];
 
@@ -45,6 +45,12 @@
     const whiteCapturesDisplay = document.getElementById("white-captures");
 
     let previousBoardState = null;
+
+    // Lägg till en variabel för att visa vilken spelare som är aktuell
+    const currentPlayerDisplay = document.createElement("p");
+    currentPlayerDisplay.style.textAlign = "center";
+    currentPlayerDisplay.textContent = `Aktuell spelare: ${currentPlayer === "black" ? "Svart" : "Vit"}`;
+    document.body.insertBefore(currentPlayerDisplay, canvas);
 
     function updateCapturesDisplay() {
       blackCapturesDisplay.textContent = blackCaptures;
@@ -151,6 +157,7 @@
       return true;
     }
 
+    // Event listener för klick på brädet
     canvas.addEventListener("click", (e) => {
       const rect = canvas.getBoundingClientRect();
       const x = e.clientX - rect.left;
@@ -199,7 +206,13 @@
       }
 
       previousBoardState = boardBeforeMove;
+
+      // Växla till nästa spelare
       currentPlayer = opponent;
+
+      // Uppdatera visningen av aktuell spelare
+      currentPlayerDisplay.textContent = `Aktuell spelare: ${currentPlayer === "black" ? "Svart" : "Vit"}`;
+
       drawBoard();
     });
 
@@ -237,19 +250,19 @@
             }
 
             if (borderColors.size === 1) {
-              const owner = [...borderColors][0];
-              if (owner === "black") blackScore += area.size;
-              else if (owner === "white") whiteScore += area.size;
+              const color = borderColors.values().next().value;
+              if (color === "black") blackScore += area.size;
+              else if (color === "white") whiteScore += area.size;
             }
           }
         }
       }
 
-      alert(`Poäng:\nSvart: ${blackScore}\nVit: ${whiteScore}`);
+      alert(`Svart poäng: ${blackScore}, Vit poäng: ${whiteScore}`);
     }
 
+    // Rita brädet vid laddning
     drawBoard();
-    updateCapturesDisplay();
   </script>
 </body>
 </html>
