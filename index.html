@@ -151,6 +151,58 @@
       return true;
     }
 
+    canvas.addEventListener("click", (e) => {
+      const rect = canvas.getBoundingClientRect();
+      const x = e.clientX - rect.left;
+      const y = e.clientY - rect.top;
+
+      const col = Math.round((x - offset) / cellSize);
+      const row = Math.round((y - offset) / cellSize);
+
+      if (row < 0 || row >= boardSize || col < 0 || col >= boardSize) return;
+      if (gameState[row][col] !== null) return;
+
+      const boardBeforeMove = copyBoard(gameState);
+
+      gameState[row][col] = currentPlayer;
+
+      const opponent = currentPlayer === "black" ? "white" : "black";
+      let capturedAny = false;
+
+      const groupsToRemove = [];
+      for (const [nr, nc] of getNeighbors(row, col)) {
+        if (gameState[nr][nc] === opponent) {
+          const { group, liberties } = getGroupAndLiberties(nr, nc, opponent);
+          if (liberties.size === 0) {
+            groupsToRemove.push(group);
+          }
+        }
+      }
+
+      for (const group of groupsToRemove) {
+        removeGroup(group, opponent);
+        capturedAny = true;
+      }
+
+      const { liberties } = getGroupAndLiberties(row, col, currentPlayer);
+      if (liberties.size === 0 && !capturedAny) {
+        gameState[row][col] = null;
+        alert("Självmord! Försök igen.");
+        return;
+      }
+
+      if (previousBoardState && boardsEqual(previousBoardState, gameState)) {
+        gameState[row][col] = null;
+        drawBoard();
+        alert("Ko-regel: Du kan inte direkt återta en sten i samma position.");
+        return;
+      }
+
+      previousBoardState = boardBeforeMove;
+      currentPlayer = opponent;
+      drawBoard();
+    });
+
     function countScore() {
       let blackScore = blackCaptures;
       let whiteScore = whiteCaptures;
@@ -184,34 +236,10 @@
               }
             }
 
-            // Om området är omringat av endast en färg (eller om det inte finns några ögon)
             if (borderColors.size === 1) {
               const owner = [...borderColors][0];
-              if (owner === "black") {
-                blackScore += area.size;
-              } else if (owner === "white") {
-                whiteScore += area.size;
-              }
-            }
-          }
-        }
-      }
-
-      // Räkna döda stenar (dvs stenar som är omringade inom motståndarens territorium)
-      for (let row = 0; row < boardSize; row++) {
-        for (let col = 0; col < boardSize; col++) {
-          const stone = gameState[row][col];
-          if (stone) {
-            const opponent = stone === "black" ? "white" : "black";
-            const { group, liberties } = getGroupAndLiberties(row, col, stone);
-
-            // Om gruppen inte har några friheter och den är i motståndarens territorium
-            if (liberties.size === 0) {
-              if (stone === "black") {
-                whiteScore += group.size;  // Svarta stenar som fångats av vit räknas som poäng för vit
-              } else {
-                blackScore += group.size;  // Vita stenar som fångats av svart räknas som poäng för svart
-              }
+              if (owner === "black") blackScore += area.size;
+              else if (owner === "white") whiteScore += area.size;
             }
           }
         }
