@@ -1,0 +1,227 @@
+<!DOCTYPE html>
+<html lang="sv">
+<head>
+  <meta charset="UTF-8">
+  <title>Go-spel (19x19)</title>
+  <style>
+    canvas {
+      border: 1px solid #000;
+      display: block;
+      margin: 20px auto;
+      background-color: #f4e4b7;
+    }
+    button, #captures {
+      display: block;
+      margin: 10px auto;
+      text-align: center;
+    }
+  </style>
+</head>
+<body>
+  <canvas id="go-board" width="600" height="600"></canvas>
+  <div id="captures">
+    <p>Svart fångar: <span id="black-captures">0</span></p>
+    <p>Vit fångar: <span id="white-captures">0</span></p>
+  </div>
+  <button onclick="countScore()">Räkna Poäng</button>
+
+  <script>
+    const canvas = document.getElementById("go-board");
+    const ctx = canvas.getContext("2d");
+
+    const boardSize = 19;
+    const cellSize = canvas.width / (boardSize + 1);
+    const offset = cellSize;
+
+    const gameState = Array.from({ length: boardSize }, () => Array(boardSize).fill(null));
+    let currentPlayer = "black";
+
+    const hoshiCoords = [3, 9, 15];
+
+    let blackCaptures = 0;
+    let whiteCaptures = 0;
+
+    const blackCapturesDisplay = document.getElementById("black-captures");
+    const whiteCapturesDisplay = document.getElementById("white-captures");
+
+    let previousBoardState = null;
+
+    function updateCapturesDisplay() {
+      blackCapturesDisplay.textContent = blackCaptures;
+      whiteCapturesDisplay.textContent = whiteCaptures;
+    }
+
+    function drawBoard() {
+      ctx.clearRect(0, 0, canvas.width, canvas.height);
+
+      ctx.strokeStyle = "#000";
+      for (let i = 0; i < boardSize; i++) {
+        const pos = offset + i * cellSize;
+        ctx.beginPath();
+        ctx.moveTo(offset, pos);
+        ctx.lineTo(offset + (boardSize - 1) * cellSize, pos);
+        ctx.stroke();
+
+        ctx.beginPath();
+        ctx.moveTo(pos, offset);
+        ctx.lineTo(pos, offset + (boardSize - 1) * cellSize);
+        ctx.stroke();
+      }
+
+      for (let r of hoshiCoords) {
+        for (let c of hoshiCoords) {
+          ctx.beginPath();
+          ctx.arc(offset + c * cellSize, offset + r * cellSize, 3, 0, 2 * Math.PI);
+          ctx.fillStyle = "#000";
+          ctx.fill();
+        }
+      }
+
+      for (let row = 0; row < boardSize; row++) {
+        for (let col = 0; col < boardSize; col++) {
+          const stone = gameState[row][col];
+          if (stone) {
+            const x = offset + col * cellSize;
+            const y = offset + row * cellSize;
+            ctx.beginPath();
+            ctx.arc(x, y, cellSize * 0.4, 0, 2 * Math.PI);
+            ctx.fillStyle = stone === "black" ? "#000" : "#fff";
+            ctx.fill();
+            ctx.stroke();
+          }
+        }
+      }
+    }
+
+    function getNeighbors(row, col) {
+      const neighbors = [];
+      if (row > 0) neighbors.push([row - 1, col]);
+      if (row < boardSize - 1) neighbors.push([row + 1, col]);
+      if (col > 0) neighbors.push([row, col - 1]);
+      if (col < boardSize - 1) neighbors.push([row, col + 1]);
+      return neighbors;
+    }
+
+    function getGroupAndLiberties(row, col, color, visited = new Set()) {
+      const key = `${row},${col}`;
+      if (visited.has(key)) return { group: new Set(), liberties: new Set() };
+      visited.add(key);
+
+      const group = new Set([key]);
+      const liberties = new Set();
+
+      for (const [nr, nc] of getNeighbors(row, col)) {
+        const neighbor = gameState[nr][nc];
+        const neighborKey = `${nr},${nc}`;
+        if (neighbor === null) {
+          liberties.add(neighborKey);
+        } else if (neighbor === color && !visited.has(neighborKey)) {
+          const result = getGroupAndLiberties(nr, nc, color, visited);
+          result.group.forEach(s => group.add(s));
+          result.liberties.forEach(l => liberties.add(l));
+        }
+      }
+
+      return { group, liberties };
+    }
+
+    function removeGroup(group, color) {
+      for (const stone of group) {
+        const [r, c] = stone.split(",").map(Number);
+        gameState[r][c] = null;
+      }
+      if (color === "black") {
+        whiteCaptures += group.size;
+      } else {
+        blackCaptures += group.size;
+      }
+      updateCapturesDisplay();
+    }
+
+    function copyBoard(board) {
+      return board.map(row => row.slice());
+    }
+
+    function boardsEqual(b1, b2) {
+      for (let r = 0; r < boardSize; r++) {
+        for (let c = 0; c < boardSize; c++) {
+          if (b1[r][c] !== b2[r][c]) return false;
+        }
+      }
+      return true;
+    }
+
+    function countScore() {
+      let blackScore = blackCaptures;
+      let whiteScore = whiteCaptures;
+      const visited = new Set();
+
+      for (let row = 0; row < boardSize; row++) {
+        for (let col = 0; col < boardSize; col++) {
+          const stone = gameState[row][col];
+          const key = `${row},${col}`;
+
+          if (stone === null && !visited.has(key)) {
+            const area = new Set();
+            const borderColors = new Set();
+            const queue = [[row, col]];
+
+            while (queue.length > 0) {
+              const [r, c] = queue.pop();
+              const k = `${r},${c}`;
+              if (visited.has(k)) continue;
+              visited.add(k);
+              area.add(k);
+
+              for (const [nr, nc] of getNeighbors(r, c)) {
+                const neighbor = gameState[nr][nc];
+                if (neighbor === null) {
+                  const nk = `${nr},${nc}`;
+                  if (!visited.has(nk)) queue.push([nr, nc]);
+                } else {
+                  borderColors.add(neighbor);
+                }
+              }
+            }
+
+            // Om området är omringat av endast en färg (eller om det inte finns några ögon)
+            if (borderColors.size === 1) {
+              const owner = [...borderColors][0];
+              if (owner === "black") {
+                blackScore += area.size;
+              } else if (owner === "white") {
+                whiteScore += area.size;
+              }
+            }
+          }
+        }
+      }
+
+      // Räkna döda stenar (dvs stenar som är omringade inom motståndarens territorium)
+      for (let row = 0; row < boardSize; row++) {
+        for (let col = 0; col < boardSize; col++) {
+          const stone = gameState[row][col];
+          if (stone) {
+            const opponent = stone === "black" ? "white" : "black";
+            const { group, liberties } = getGroupAndLiberties(row, col, stone);
+
+            // Om gruppen inte har några friheter och den är i motståndarens territorium
+            if (liberties.size === 0) {
+              if (stone === "black") {
+                whiteScore += group.size;  // Svarta stenar som fångats av vit räknas som poäng för vit
+              } else {
+                blackScore += group.size;  // Vita stenar som fångats av svart räknas som poäng för svart
+              }
+            }
+          }
+        }
+      }
+
+      alert(`Poäng:\nSvart: ${blackScore}\nVit: ${whiteScore}`);
+    }
+
+    drawBoard();
+    updateCapturesDisplay();
+  </script>
+</body>
+</html>
